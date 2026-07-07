@@ -132,6 +132,7 @@ header {
     display: inline-block;
     width: 46px;
     height: 24px;
+    flex-shrink: 0;
 }
 
 .switch input {
@@ -253,6 +254,10 @@ input:checked+.slider:before {
     font-weight: bold;
     margin-bottom: 5px;
     color: #666;
+}
+
+.mobile-weekday {
+    display: none;
 }
 
 .current-day {
@@ -769,3 +774,107 @@ body.dark-mode .mark-category-watched-btn.all-done {
     border-color: #065f46;
     color: #6ee7b7;
 }
+
+/* Responsive Mobile Layout */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+
+    header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .header-titles, .header-right {
+        display: contents;
+    }
+
+    .header-titles h1 {
+        font-size: 1.5em;
+        margin-bottom: 0;
+        text-align: center;
+        order: 1;
+    }
+
+    #auth-btn {
+        margin-top: 0;
+        order: 2;
+    }
+    
+    .dark-mode-container {
+        order: 3;
+    }
+
+    .legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        order: 4;
+    }
+
+    .month-navigation {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 5px;
+        order: 5;
+    }
+
+    .legend-item {
+        font-size: 0.8em;
+        padding: 6px 10px;
+    }
+
+    /* Change Calendar to 1-Column Agenda View */
+    #calendar-header {
+        display: none; /* Hide Sun-Sat header */
+    }
+
+    .calendar-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    /* Hide the empty padding cells from previous/next months */
+    .calendar-grid > div:empty {
+        display: none;
+    }
+
+    .day {
+        min-height: auto;
+        padding: 12px;
+    }
+
+    .day-number {
+        font-size: 1.1em;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+        margin-bottom: 10px;
+    }
+
+    .mobile-weekday {
+        display: inline-block;
+        margin-left: 5px;
+        color: #888;
+        font-weight: normal;
+    }
+
+    body.dark-mode .day-number {
+        border-bottom-color: #333;
+    }
+
+    .yt-item {
+        padding: 6px;
+        font-size: 0.9em;
+    }
+
+    .yt-item-thumbnail {
+        width: 60px;
+        height: 34px;
+    }
+}

@@ -391,6 +391,9 @@ async function fetchUploadsForChannels(channelIds) {
         }
 
         // Step 4: Process all activities with the detailed video info to categorize them accurately
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const isAndroid = /Android/.test(navigator.userAgent);
+
         const allUploads = activities.map(item => {
             const publishedDate = new Date(item.snippet.publishedAt);
             let itemType = null, itemId = null, itemUrl = null, itemTitle = escapeHTML(item.snippet.title), thumbnailUrl = item.snippet.thumbnails?.default?.url;
@@ -411,7 +414,24 @@ async function fetchUploadsForChannels(channelIds) {
                 } else {
                     itemType = 'video'; // Fallback if details are missing
                 }
-                itemUrl = (itemType === 'short') ? `https://www.youtube.com/shorts/${itemId}` : `https://www.youtube.com/watch?v=${itemId}`;
+                
+                if (itemType === 'short') {
+                    if (isAndroid) {
+                        itemUrl = `intent://shorts/${itemId}#Intent;scheme=vnd.youtube;package=com.google.android.youtube;S.browser_fallback_url=https%3A%2F%2Fwww.youtube.com%2Fshorts%2F${itemId};end;`;
+                    } else if (isIOS) {
+                        itemUrl = `youtube://shorts/${itemId}`;
+                    } else {
+                        itemUrl = `https://www.youtube.com/shorts/${itemId}`;
+                    }
+                } else {
+                    if (isAndroid) {
+                        itemUrl = `intent://watch?v=${itemId}#Intent;scheme=vnd.youtube;package=com.google.android.youtube;S.browser_fallback_url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D${itemId};end;`;
+                    } else if (isIOS) {
+                        itemUrl = `youtube://watch?v=${itemId}`;
+                    } else {
+                        itemUrl = `https://www.youtube.com/watch?v=${itemId}`;
+                    }
+                }
             }
             else if (item.snippet.type === 'bulletin' && item.contentDetails.bulletin) {
                 itemType = 'community';
@@ -630,7 +650,12 @@ function renderCalendar(date) {
 
         const dayLabel = document.createElement('div');
         dayLabel.classList.add('day-number');
-        dayLabel.innerText = i;
+        
+        // Calculate the short weekday name (e.g., 'Mon', 'Tue')
+        const currentDayDate = new Date(year, month, i);
+        const weekdayName = currentDayDate.toLocaleDateString('en-US', { weekday: 'short' });
+        
+        dayLabel.innerHTML = `${i} <span class="mobile-weekday">${weekdayName}</span>`;
         dayCell.appendChild(dayLabel);
 
         // Highlight if this specific day cell is today
@@ -721,6 +746,17 @@ nextMonthBtn.addEventListener('click', () => {
 todayBtn.addEventListener('click', () => {
     currentDate = new Date();
     renderCalendar(currentDate);
+    
+    // On narrow screens (mobile view), automatically scroll down to the current day
+    if (window.innerWidth <= 768) {
+        // Use a tiny timeout to let the browser render the new calendar cells first
+        setTimeout(() => {
+            const todayCell = document.querySelector('.current-day');
+            if (todayCell) {
+                todayCell.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 50);
+    }
 });
 
 forceRefreshBtn.addEventListener('click', () => {

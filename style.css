@@ -778,7 +778,7 @@ body.dark-mode .mark-category-watched-btn.all-done {
 /* Responsive Mobile Layout */
 @media (max-width: 768px) {
     body {
-        padding: 10px;
+        padding: 0;
     }
 
     header {
@@ -786,7 +786,25 @@ body.dark-mode .mark-category-watched-btn.all-done {
         flex-direction: column;
         align-items: center;
         gap: 15px;
-        margin-bottom: 20px;
+        margin-top: 0;
+        margin-bottom: 15px;
+        padding: 15px 10px;
+        position: sticky;
+        top: 0;
+        background-color: #f4f4f9;
+        z-index: 50;
+        border-bottom: 1px solid #e2e8f0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+
+    body.dark-mode header {
+        background-color: #121212;
+        border-bottom-color: #333;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+
+    main {
+        padding: 0 10px 10px 10px;
     }
 
     .header-titles, .header-right {

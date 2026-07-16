@@ -15,7 +15,6 @@ const prevMonthBtn = document.getElementById('prev-month-btn');
 const nextMonthBtn = document.getElementById('next-month-btn');
 const authBtn = document.getElementById('auth-btn');
 const todayBtn = document.getElementById('today-btn');
-const darkModeToggle = document.getElementById('dark-mode-toggle');
 const forceRefreshBtn = document.getElementById('force-refresh-btn');
 const searchInput = document.getElementById('search-input');
 const modal = document.getElementById('details-modal');
@@ -23,7 +22,10 @@ const modalOverlay = document.getElementById('modal-overlay');
 const modalContent = document.getElementById('modal-content');
 const loadingOverlay = document.getElementById('loading-overlay');
 const modalCloseBtn = document.getElementById('modal-close-btn');
+const prevDayBtn = document.getElementById('prev-day-btn');
+const nextDayBtn = document.getElementById('next-day-btn');
 let currentDate = new Date();
+let currentlyViewedDate = null;
 
 let gapiInited = false;
 let gisInited = false;
@@ -211,32 +213,30 @@ function updateAuthUI() { // This function now primarily updates the button's te
         authBtn.onclick = handleSignoutClick;
         console.log('DEBUG: UI updated to "Log Out" state.');
 
-        // Check for a fresh cache first
+        // Check for a cache first
         const cachedDataJSON = localStorage.getItem('youtube_calendar_cache');
+        let hasRenderedCache = false;
         try {
             const CACHE_EXPIRATION_MINUTES = 15;
             if (cachedDataJSON) {
                 const cache = JSON.parse(cachedDataJSON);
+                
+                // Immediately render from cache, regardless of age!
+                console.log(`DEBUG: Found cache. Loading immediately.`);
+                uploads = cache.uploads.map(upload => ({
+                    ...upload,
+                    publishedAt: new Date(upload.publishedAt)
+                }));
+                renderCalendar(currentDate);
+                hasRenderedCache = true;
+
                 const cacheAgeMinutes = (new Date().getTime() - cache.timestamp) / 1000 / 60;
 
                 if (cacheAgeMinutes < CACHE_EXPIRATION_MINUTES) {
-                    console.log(`DEBUG: Found fresh cache (less than ${CACHE_EXPIRATION_MINUTES} minutes old). Loading from cache.`);
-                    loadingOverlay.style.display = 'flex';
-
-                    // JSON stringifies dates, so we need to convert them back to Date objects
-                    uploads = cache.uploads.map(upload => ({
-                        ...upload,
-                        publishedAt: new Date(upload.publishedAt)
-                    }));
-
-                    // Use a short timeout to allow the spinner to render before the main thread is blocked by rendering
-                    setTimeout(() => {
-                        renderCalendar(currentDate);
-                        loadingOverlay.style.display = 'none';
-                    }, 50);
+                    console.log(`DEBUG: Cache is fresh (less than ${CACHE_EXPIRATION_MINUTES} minutes old). No background fetch needed.`);
                     return; // We're done, no need to fetch from API
                 } else {
-                    console.log("DEBUG: Cache is stale, will fetch new data.");
+                    console.log("DEBUG: Cache is stale, will fetch new data in background.");
                 }
             }
         } catch (e) {
@@ -244,8 +244,8 @@ function updateAuthUI() { // This function now primarily updates the button's te
             localStorage.removeItem('youtube_calendar_cache');
         }
 
-        // If we reach here, it means there's no fresh cache, so fetch from API.
-        fetchSubscriptions();
+        // If we reach here, we need to fetch from API (either no cache or stale cache).
+        fetchSubscriptions(hasRenderedCache);
     } else {
         authBtn.textContent = 'Log In with YouTube';
         forceRefreshBtn.style.display = 'none';
@@ -254,8 +254,10 @@ function updateAuthUI() { // This function now primarily updates the button's te
     }
 }
 
-async function fetchSubscriptions() {
-    loadingOverlay.style.display = 'flex';
+async function fetchSubscriptions(isBackgroundRefresh = false) {
+    if (!isBackgroundRefresh) {
+        loadingOverlay.style.display = 'flex';
+    }
 
     try {
         let allSubscriptions = [];
@@ -285,14 +287,14 @@ async function fetchSubscriptions() {
         const channelIds = allSubscriptions.map(sub => sub.snippet.resourceId.channelId);
 
         // Now fetch the recent uploads for these channels
-        await fetchUploadsForChannels(channelIds);
+        await fetchUploadsForChannels(channelIds, isBackgroundRefresh);
 
     } catch (error) {
-        handleApiError(error, 'Failed to fetch subscriptions.');
+        handleApiError(error, 'Failed to fetch subscriptions.', isBackgroundRefresh);
     }
 }
 
-function handleApiError(error, userMessage) {
+function handleApiError(error, userMessage, isBackgroundRefresh = false) {
     loadingOverlay.style.display = 'none'; // Hide spinner on any API error
 
     console.error(userMessage, error);
@@ -303,17 +305,22 @@ function handleApiError(error, userMessage) {
         console.log("DEBUG: Token expired or invalid (401). Clearing session.");
         localStorage.removeItem('youtube_access_token');
         gapi.client.setToken(null); // Clear the bad token from the GAPI client
-        alert("Your session has expired. Please log in again.");
         updateAuthUI(); // Reset UI to logged-out state
-        uploads = []; // Clear data model
-        renderCalendar(currentDate); // Re-render to clear view
+        
+        if (!isBackgroundRefresh) {
+            uploads = []; // Clear data model
+            renderCalendar(currentDate); // Re-render to clear view
+            alert("Your session has expired. Please log in again.");
+        }
     } else if (apiError && apiError.code === 403 && apiError.errors?.[0]?.reason === 'quotaExceeded') {
         console.log("DEBUG: YouTube API daily quota exceeded (403).");
-        // We don't need to log the user out, just inform them.
-        alert("The application has exceeded its daily YouTube API usage limit. Some data may be missing. Please try again tomorrow.");
-        // The app will display whatever data it managed to fetch before the quota was hit.
+        if (!isBackgroundRefresh) {
+            alert("The application has exceeded its daily YouTube API usage limit. Some data may be missing. Please try again tomorrow.");
+        }
     } else {
-        alert(`${userMessage} Please check the console for details.`);
+        if (!isBackgroundRefresh) {
+            alert(`${userMessage} Please check the console for details.`);
+        }
     }
 }
 
@@ -334,7 +341,7 @@ function parseISO8601Duration(duration) {
     return (hours * 3600) + (minutes * 60) + seconds;
 }
 
-async function fetchUploadsForChannels(channelIds) {
+async function fetchUploadsForChannels(channelIds, isBackgroundRefresh = false) {
     console.log(`DEBUG: Fetching activities for ${channelIds.length} channels.`);
 
     try {
@@ -435,9 +442,9 @@ async function fetchUploadsForChannels(channelIds) {
 
         uploads = allUploads;
         renderCalendar(currentDate);
-        loadingOverlay.style.display = 'none'; // Hide spinner after successful fetch and render
+        loadingOverlay.style.display = 'none'; // Hide spinner unconditionally
     } catch (error) {
-        handleApiError(error, 'Failed to fetch video uploads.');
+        handleApiError(error, 'Failed to fetch video uploads.', isBackgroundRefresh);
     }
 }
 
@@ -455,6 +462,30 @@ try {
 } catch (e) {
     console.error("Could not parse calendarFilters from localStorage. Resetting.", e);
     activeFilters = defaultFilters;
+}
+
+function openDayModalForDate(targetDate) {
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+    const date = targetDate.getDate();
+
+    const searchQuery = searchInput.value.toLowerCase();
+    const allUploadsForThisDay = uploads.filter(upload =>
+        upload.year === year && upload.month === month && upload.date === date
+    );
+    const dayUploads = allUploadsForThisDay.filter(upload => {
+        const matchesType = activeFilters[upload.type];
+        const matchesSearch = upload.title.toLowerCase().includes(searchQuery) || upload.channel.toLowerCase().includes(searchQuery);
+        return matchesType && matchesSearch;
+    });
+
+    dayUploads.sort((a, b) => a.publishedAt - b.publishedAt);
+
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const dateString = `${monthNames[month]} ${date}, ${year}`;
+
+    currentlyViewedDate = targetDate;
+    openDayModal(dateString, dayUploads, allUploadsForThisDay.length);
 }
 
 function openDayModal(dateString, uploads, totalUploadsForDay) {
@@ -655,6 +686,7 @@ function renderCalendar(date) {
 
         // Make the entire day cell clickable to open the day view modal
         dayCell.addEventListener('click', () => {
+            currentlyViewedDate = new Date(year, month, i);
             const dateString = `${monthNames[month]} ${i}, ${year}`;
             openDayModal(dateString, dayUploads, allUploadsForThisDay.length);
         });
@@ -728,29 +760,32 @@ forceRefreshBtn.addEventListener('click', () => {
     if (gapi.client.getToken() !== null) {
         console.log("DEBUG: Force refresh clicked. Clearing cache and fetching new data.");
         localStorage.removeItem('youtube_calendar_cache');
-        fetchSubscriptions();
+        fetchSubscriptions(false); // force spinner
     }
 });
 
-// Check local storage for dark mode preference on load
-if (localStorage.getItem('darkMode') === 'enabled') {
-    document.body.classList.add('dark-mode');
-    darkModeToggle.checked = true;
-}
 
-darkModeToggle.addEventListener('change', () => {
-    if (darkModeToggle.checked) {
-        document.body.classList.add('dark-mode');
-        localStorage.setItem('darkMode', 'enabled');
-    } else {
-        document.body.classList.remove('dark-mode');
-        localStorage.setItem('darkMode', 'disabled');
-    }
-});
 
 // Modal event listeners
 modalCloseBtn.addEventListener('click', closeModal);
 modalOverlay.addEventListener('click', closeModal);
+
+prevDayBtn.addEventListener('click', () => {
+    if (currentlyViewedDate) {
+        const newDate = new Date(currentlyViewedDate);
+        newDate.setDate(newDate.getDate() - 1);
+        openDayModalForDate(newDate);
+    }
+});
+
+nextDayBtn.addEventListener('click', () => {
+    if (currentlyViewedDate) {
+        const newDate = new Date(currentlyViewedDate);
+        newDate.setDate(newDate.getDate() + 1);
+        openDayModalForDate(newDate);
+    }
+});
+
 window.addEventListener('keydown', (e) => {
     // Close modal on 'Escape' key press
     if (e.key === 'Escape' && document.body.classList.contains('modal-open')) {
@@ -764,6 +799,17 @@ window.addEventListener('keydown', (e) => {
         } else if (e.key === 'ArrowRight') {
             currentDate.setMonth(currentDate.getMonth() + 1);
             renderCalendar(currentDate);
+        }
+    } else if (document.body.classList.contains('modal-open') && document.activeElement?.tagName !== 'INPUT') {
+        // Navigate days with arrow keys when modal is open
+        if (e.key === 'ArrowLeft' && currentlyViewedDate) {
+            const newDate = new Date(currentlyViewedDate);
+            newDate.setDate(newDate.getDate() - 1);
+            openDayModalForDate(newDate);
+        } else if (e.key === 'ArrowRight' && currentlyViewedDate) {
+            const newDate = new Date(currentlyViewedDate);
+            newDate.setDate(newDate.getDate() + 1);
+            openDayModalForDate(newDate);
         }
     }
 });

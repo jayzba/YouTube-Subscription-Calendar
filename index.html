@@ -25,13 +25,7 @@
             </div>
         </div>
         <div class="header-right">
-            <div class="dark-mode-container">
-                <span class="dark-mode-label">Dark Mode</span>
-                <label class="switch" title="Toggle Dark Mode">
-                    <input type="checkbox" id="dark-mode-toggle">
-                    <span class="slider"></span>
-                </label>
-            </div>
+
             <div class="legend">
                 <span class="legend-item video" data-type="video" title="Toggle Standard Videos">Standard Video</span>
                 <span class="legend-item livestream" data-type="livestream" title="Toggle Livestreams">Livestream</span>
@@ -62,9 +56,11 @@
     <div id="modal-overlay" class="modal-overlay"></div>
     <div id="details-modal" class="modal">
         <button id="modal-close-btn" class="modal-close-btn" title="Close">&times;</button>
+        <button id="prev-day-btn" class="modal-nav-btn prev" title="Previous Day">◀</button>
         <div id="modal-content">
             <!-- Details will be injected here -->
         </div>
+        <button id="next-day-btn" class="modal-nav-btn next" title="Next Day">▶</button>
     </div>
 
     <div id="loading-overlay" class="loading-overlay">

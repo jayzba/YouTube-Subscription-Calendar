@@ -800,3 +800,116 @@ body {
 .modal-nav-btn.next {
     right: 10px;
 }
+\n/* Responsive Mobile Layout */
+@media (max-width: 768px) {
+    body {
+        padding: 0;
+    }
+
+    header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+        margin-top: 0;
+        margin-bottom: 15px;
+        padding: 15px 10px;
+        position: sticky;
+        top: 0;
+        background-color: #121212;
+        z-index: 50;
+        border-bottom: 1px solid #333;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+
+    
+
+    main {
+        padding: 0 10px 10px 10px;
+    }
+
+    .header-titles, .header-right {
+        display: contents;
+    }
+
+    .header-titles h1 {
+        font-size: 1.5em;
+        margin-bottom: 0;
+        text-align: center;
+        order: 1;
+    }
+
+    #auth-btn {
+        margin-top: 0;
+        order: 2;
+    }
+    
+    
+
+    .legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        order: 4;
+    }
+
+    .month-navigation {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 5px;
+        order: 5;
+    }
+
+    .legend-item {
+        font-size: 0.8em;
+        padding: 6px 10px;
+    }
+
+    /* Change Calendar to 1-Column Agenda View */
+    #calendar-header {
+        display: none; /* Hide Sun-Sat header */
+    }
+
+    .calendar-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    /* Hide the empty padding cells from previous/next months */
+    .calendar-grid > div:empty {
+        display: none;
+    }
+
+    .day {
+        min-height: auto;
+        padding: 12px;
+    }
+
+    .day-number {
+        font-size: 1.1em;
+        border-bottom: 1px solid #333;
+        padding-bottom: 5px;
+        margin-bottom: 10px;
+    }
+
+    .mobile-weekday {
+        display: inline-block;
+        margin-left: 5px;
+        color: #888;
+        font-weight: normal;
+    }
+
+    
+
+    .yt-item {
+        padding: 6px;
+        font-size: 0.9em;
+    }
+
+    .yt-item-thumbnail {
+        width: 60px;
+        height: 34px;
+    }
+}\n

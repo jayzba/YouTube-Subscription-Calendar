@@ -95,10 +95,10 @@ function saveWatchHistory(videoId) {
                 window.firestoreDocs.setDoc(videoRef, {
                     videoId: video.id,
                     title: video.title,
-                    channelTitle: video.channelTitle,
-                    thumbnailUrl: video.thumbnailUrl,
-                    durationFormatted: video.durationFormatted,
-                    durationSeconds: video.durationSeconds,
+                    channel: video.channel,
+                    thumbnail: video.thumbnail || null,
+                    type: video.type,
+                    url: video.url,
                     watchedAt: new Date().toISOString(),
                     watched: true
                 }).then(() => {

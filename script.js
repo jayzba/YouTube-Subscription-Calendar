@@ -71,15 +71,53 @@ function loadWatchHistory() {
     }
 }
 
-function saveWatchHistory() {
+function saveWatchHistory(videoId) {
+    // Keep the local storage version as a fallback/fast cache
     localStorage.setItem('watchedVideoIds', JSON.stringify(watchedData));
+
+    // If a videoId was provided, save it to Firebase
+    if (videoId && window.firebaseDB) {
+        // Find the full video object from our loaded uploads
+        const video = uploads.find(u => u.id === videoId);
+        
+        if (video) {
+            // Use the real Firebase user ID if available, otherwise fallback to local
+            let userId = window.firebaseUserId || localStorage.getItem('local_user_id');
+            if (!userId) {
+                userId = 'user_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('local_user_id', userId);
+            }
+
+            try {
+                // Reference: users/{userId}/watchedVideos/{videoId}
+                const videoRef = window.firestoreDocs.doc(window.firebaseDB, "users", userId, "watchedVideos", video.id);
+
+                window.firestoreDocs.setDoc(videoRef, {
+                    videoId: video.id,
+                    title: video.title,
+                    channelTitle: video.channelTitle,
+                    thumbnailUrl: video.thumbnailUrl,
+                    durationFormatted: video.durationFormatted,
+                    durationSeconds: video.durationSeconds,
+                    watchedAt: new Date().toISOString(),
+                    watched: true
+                }).then(() => {
+                    console.log("Watch history saved to Firestore successfully!");
+                }).catch(error => {
+                    console.error("Error saving to Firestore:", error);
+                });
+            } catch (error) {
+                console.error("Error setting up Firebase document:", error);
+            }
+        }
+    }
 }
 
 function markAsWatched(videoId) {
     if (!videoId) return;
     watchedData[videoId] = Date.now();
     watchedIds.add(videoId);
-    saveWatchHistory();
+    saveWatchHistory(videoId);
 }
 
 ({ data: watchedData, ids: watchedIds } = loadWatchHistory());
@@ -149,11 +187,26 @@ function handleSignoutClick() {
             localStorage.removeItem('youtube_access_token');
             localStorage.removeItem('youtube_calendar_cache');
             localStorage.removeItem('watchedVideoIds');
+            window.firebaseUserId = null; // Clear Firebase UID
+            if (window.firebaseAuth) window.firebaseAuth.auth.signOut();
             watchedData = {};
             watchedIds.clear();
             uploads = []; // Clear data on sign out
             updateAuthUI();
             renderCalendar(currentDate); // Re-render to clear view
+        });
+    }
+}
+
+function syncFirebaseAuth(accessToken) {
+    if (window.firebaseAuth) {
+        const { auth, signInWithCredential, GoogleAuthProvider } = window.firebaseAuth;
+        const credential = GoogleAuthProvider.credential(null, accessToken);
+        signInWithCredential(auth, credential).then((result) => {
+            console.log("DEBUG: Synced with Firebase Auth. UID:", result.user.uid);
+            window.firebaseUserId = result.user.uid;
+        }).catch((error) => {
+            console.error("DEBUG: Firebase auth sync failed:", error);
         });
     }
 }
@@ -168,6 +221,7 @@ function handleTokenResponse(tokenResponse) {
     // If we get here, sign-in was successful (either silent or manual).
     gapi.client.setToken(tokenResponse);
     localStorage.setItem('youtube_access_token', tokenResponse.access_token);
+    syncFirebaseAuth(tokenResponse.access_token); // Log into Firebase
     updateAuthUI();
 }
 
@@ -190,6 +244,7 @@ function checkAndInitializeAuth() { // Renamed from initializeSession
         if (savedToken) {
             console.log("DEBUG: Found saved token, setting it in gapi.client.");
             gapi.client.setToken({ access_token: savedToken });
+            syncFirebaseAuth(savedToken); // Log into Firebase
         }
         updateAuthUI(); // Update UI based on current auth state (token might be null or restored)
     }
@@ -220,7 +275,7 @@ function updateAuthUI() { // This function now primarily updates the button's te
             const CACHE_EXPIRATION_MINUTES = 15;
             if (cachedDataJSON) {
                 const cache = JSON.parse(cachedDataJSON);
-                
+
                 // Immediately render from cache, regardless of age!
                 console.log(`DEBUG: Found cache. Loading immediately.`);
                 uploads = cache.uploads.map(upload => ({
@@ -306,7 +361,7 @@ function handleApiError(error, userMessage, isBackgroundRefresh = false) {
         localStorage.removeItem('youtube_access_token');
         gapi.client.setToken(null); // Clear the bad token from the GAPI client
         updateAuthUI(); // Reset UI to logged-out state
-        
+
         if (!isBackgroundRefresh) {
             uploads = []; // Clear data model
             renderCalendar(currentDate); // Re-render to clear view
@@ -421,7 +476,7 @@ async function fetchUploadsForChannels(channelIds, isBackgroundRefresh = false) 
                 } else {
                     itemType = 'video'; // Fallback if details are missing
                 }
-                
+
                 if (itemType === 'short') {
                     if (isAndroid) {
                         itemUrl = `intent://shorts/${itemId}#Intent;scheme=vnd.youtube;package=com.google.android.youtube;S.browser_fallback_url=https%3A%2F%2Fwww.youtube.com%2Fshorts%2F${itemId};end;`;
@@ -681,11 +736,11 @@ function renderCalendar(date) {
 
         const dayLabel = document.createElement('div');
         dayLabel.classList.add('day-number');
-        
+
         // Calculate the short weekday name (e.g., 'Mon', 'Tue')
         const currentDayDate = new Date(year, month, i);
         const weekdayName = currentDayDate.toLocaleDateString('en-US', { weekday: 'short' });
-        
+
         dayLabel.innerHTML = `${i} <span class="mobile-weekday">${weekdayName}</span>`;
         dayCell.appendChild(dayLabel);
 
@@ -778,7 +833,7 @@ nextMonthBtn.addEventListener('click', () => {
 todayBtn.addEventListener('click', () => {
     currentDate = new Date();
     renderCalendar(currentDate);
-    
+
     // On narrow screens (mobile view), automatically scroll down to the current day
     if (window.innerWidth <= 768) {
         // Use a tiny timeout to let the browser render the new calendar cells first

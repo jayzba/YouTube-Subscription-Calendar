@@ -89,6 +89,33 @@
     <!-- Google API Libraries -->
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+        import { getAuth, signInWithCredential, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCiNpljb7LM1XPopr7wQI1col9k7E2VYVA",
+            authDomain: "peak-dominion-499804-b1.firebaseapp.com",
+            projectId: "peak-dominion-499804-b1",
+            storageBucket: "peak-dominion-499804-b1.firebasestorage.app",
+            messagingSenderId: "692979169985",
+            appId: "1:692979169985:web:77eeea24332b28690fb240"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Expose to window so script.js can access them
+        window.firebaseDB = db;
+        window.firestoreDocs = { doc, setDoc };
+        window.firebaseAuth = { auth, signInWithCredential, GoogleAuthProvider };
+    </script>
 </body>
 
 </html>

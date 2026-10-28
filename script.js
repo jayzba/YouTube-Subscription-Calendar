@@ -71,45 +71,80 @@ function loadWatchHistory() {
     }
 }
 
+function getCurrentUserId() {
+    let userId = window.currentUserId || localStorage.getItem('yt_user_id') || localStorage.getItem('local_user_id');
+    if (!userId) {
+        userId = 'user_' + Math.random().toString(36).substring(2, 11);
+        localStorage.setItem('local_user_id', userId);
+    }
+    return userId;
+}
+
+async function fetchWatchHistoryFromDB() {
+    const userId = getCurrentUserId();
+    try {
+        const response = await fetch(`/api/watched?userId=${encodeURIComponent(userId)}`);
+        if (!response.ok) return;
+
+        const { watchedVideos } = await response.json();
+        if (Array.isArray(watchedVideos) && watchedVideos.length > 0) {
+            let updated = false;
+            watchedVideos.forEach(row => {
+                const vid = row.video_id;
+                const ts = row.watched_at ? new Date(row.watched_at).getTime() : Date.now();
+                if (!watchedIds.has(vid)) {
+                    updated = true;
+                }
+                watchedData[vid] = ts;
+                watchedIds.add(vid);
+            });
+
+            localStorage.setItem('watchedVideoIds', JSON.stringify(watchedData));
+            if (updated) {
+                renderCalendar(currentDate);
+            }
+            console.log(`Synced ${watchedVideos.length} watched videos from PostgreSQL.`);
+        }
+    } catch (error) {
+        console.warn("PostgreSQL backend not reachable yet (using localStorage cache):", error.message);
+    }
+}
+
 function saveWatchHistory(videoId) {
     // Keep the local storage version as a fallback/fast cache
     localStorage.setItem('watchedVideoIds', JSON.stringify(watchedData));
 
-    // If a videoId was provided, save it to Firebase
-    if (videoId && window.firebaseDB) {
+    // If a videoId was provided, save it to PostgreSQL via the backend API
+    if (videoId) {
         // Find the full video object from our loaded uploads
-        const video = uploads.find(u => u.id === videoId);
-        
-        if (video) {
-            // Use the real Firebase user ID if available, otherwise fallback to local
-            let userId = window.firebaseUserId || localStorage.getItem('local_user_id');
-            if (!userId) {
-                userId = 'user_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('local_user_id', userId);
-            }
+        const video = uploads.find(u => u.id === videoId) || { id: videoId };
+        const userId = getCurrentUserId();
 
-            try {
-                // Reference: users/{userId}/watchedVideos/{videoId}
-                const videoRef = window.firestoreDocs.doc(window.firebaseDB, "users", userId, "watchedVideos", video.id);
-
-                window.firestoreDocs.setDoc(videoRef, {
-                    videoId: video.id,
-                    title: video.title,
-                    channel: video.channel,
+        fetch('/api/watched', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId,
+                video: {
+                    id: video.id,
+                    title: video.title || null,
+                    channel: video.channel || null,
                     thumbnail: video.thumbnail || null,
-                    type: video.type,
-                    url: video.url,
-                    watchedAt: new Date().toISOString(),
-                    watched: true
-                }).then(() => {
-                    console.log("Watch history saved to Firestore successfully!");
-                }).catch(error => {
-                    console.error("Error saving to Firestore:", error);
-                });
-            } catch (error) {
-                console.error("Error setting up Firebase document:", error);
-            }
-        }
+                    type: video.type || null,
+                    url: video.url || null
+                }
+            })
+        })
+            .then(res => {
+                if (res.ok) {
+                    console.log("Watch history saved to PostgreSQL successfully!");
+                } else {
+                    console.warn("PostgreSQL API returned non-OK status:", res.status);
+                }
+            })
+            .catch(error => {
+                console.error("Error saving watch history to PostgreSQL:", error);
+            });
     }
 }
 
@@ -187,8 +222,8 @@ function handleSignoutClick() {
             localStorage.removeItem('youtube_access_token');
             localStorage.removeItem('youtube_calendar_cache');
             localStorage.removeItem('watchedVideoIds');
-            window.firebaseUserId = null; // Clear Firebase UID
-            if (window.firebaseAuth) window.firebaseAuth.auth.signOut();
+            localStorage.removeItem('yt_user_id');
+            window.currentUserId = null;
             watchedData = {};
             watchedIds.clear();
             uploads = []; // Clear data on sign out
@@ -198,17 +233,22 @@ function handleSignoutClick() {
     }
 }
 
-function syncFirebaseAuth(accessToken) {
-    if (window.firebaseAuth) {
-        const { auth, signInWithCredential, GoogleAuthProvider } = window.firebaseAuth;
-        const credential = GoogleAuthProvider.credential(null, accessToken);
-        signInWithCredential(auth, credential).then((result) => {
-            console.log("DEBUG: Synced with Firebase Auth. UID:", result.user.uid);
-            window.firebaseUserId = result.user.uid;
-        }).catch((error) => {
-            console.error("DEBUG: Firebase auth sync failed:", error);
+async function syncUserSession() {
+    try {
+        const response = await gapi.client.youtube.channels.list({
+            part: 'id',
+            mine: true
         });
+        const channelId = response.result?.items?.[0]?.id;
+        if (channelId) {
+            window.currentUserId = channelId;
+            localStorage.setItem('yt_user_id', channelId);
+            console.log("DEBUG: Synced YouTube User ID:", channelId);
+        }
+    } catch (error) {
+        console.warn("DEBUG: Could not fetch YouTube channel ID, using local fallback ID:", error);
     }
+    await fetchWatchHistoryFromDB();
 }
 
 function handleTokenResponse(tokenResponse) {
@@ -221,7 +261,7 @@ function handleTokenResponse(tokenResponse) {
     // If we get here, sign-in was successful (either silent or manual).
     gapi.client.setToken(tokenResponse);
     localStorage.setItem('youtube_access_token', tokenResponse.access_token);
-    syncFirebaseAuth(tokenResponse.access_token); // Log into Firebase
+    syncUserSession(); // Resolve user ID and sync watched history with PostgreSQL
     updateAuthUI();
 }
 
@@ -244,7 +284,7 @@ function checkAndInitializeAuth() { // Renamed from initializeSession
         if (savedToken) {
             console.log("DEBUG: Found saved token, setting it in gapi.client.");
             gapi.client.setToken({ access_token: savedToken });
-            syncFirebaseAuth(savedToken); // Log into Firebase
+            syncUserSession(); // Sync user session and load watch history from PostgreSQL
         }
         updateAuthUI(); // Update UI based on current auth state (token might be null or restored)
     }

@@ -1,6 +1,7 @@
-# Configuration file with sensitive credentials.
-# DO NOT commit this file to your repository.
+# Configuration files with sensitive credentials.
+# DO NOT commit these files to your repository.
 config.js
+.env
 
 # Node.js artifacts
 /node_modules/
